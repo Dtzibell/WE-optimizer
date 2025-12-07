@@ -6,6 +6,7 @@ from copy import deepcopy
 import pprint
 from functools import wraps
 import numpy as np
+from collections import defaultdict
 
 
 class DamageCalculator:
@@ -33,6 +34,19 @@ class DamageCalculator:
         is_attacking_region_lost,
         is_per_hour,
     ):
+        with open("prices.json", "r") as f:
+            self.item_prices = json.load(f)
+        self.item_prices["items"].update(
+            {"pill": {"pill1": {"stats": {"attack": 0.8, "price": 22}}}}
+        )
+        self.item_prices["items"].update(
+                {
+                    "ammo": {
+                    "lightAmmo": {"stats": {"attack": 0.1, "price": 0.12}},
+                    "ammo": {"stats": {"attack": 0.2, "price": 0.48}},
+                    "heavyAmmo": {"stats": {"attack": 0.4, "price": 1.92}},
+                    }})
+
         self.is_pill_multiplier = 0.8
         self.is_core_region_multiplier = 0.15
         self.is_ally_multiplier = 0.1
@@ -370,7 +384,7 @@ class DamageCalculator:
         }
         self.convert_stats_to_proportion()
         self.attack_bonus = self.stats["attack"] * (
-            + self.is_pill * self.is_pill_multiplier
+            +self.is_pill * self.is_pill_multiplier
             + self.bullets_stats["percentAttack"] / 100
         )
         self.damage_multiplier = np.sum(
@@ -430,20 +444,68 @@ class DamageCalculator:
                 / 100  # because health regen is 1/10th of total health, and one needs 10 health to make an attack
                 / (1 - stats["dodge"])
                 / (1 - stats["armor"])
-                * 8 
+                * 8
             )
         )
         return dmg_per_attack, dmg_over_8h_cycle
+
+    def optimize_for_cash(self, cash, spent_on_eq=None, items=None):
+        item_types = [
+            "weapon",
+            "helmet",
+            "chest",
+            "gloves",
+            "pants",
+            "boots",
+            "pill",
+            "ammo",
+        ]
+        if items == None:
+            items = [
+                "knife",
+                "helmet1",
+                "chest1",
+                "gloves1",
+                "pants1",
+                "boots1",
+                "pill1",
+                "lightAmmo",
+            ]
+        if spent_on_eq == None:
+            spent_on_eq = 0
+        ratios = defaultdict(lambda: defaultdict(dict))
+        damage = self.calc_upgrade()[0]
+        for item_type, item in zip(item_types, items):
+            for key, stats in self.item_prices["items"][item_type][item].items():
+                s_k = list(stats.keys())[:-1]
+                if item_type in ["pill", "ammo"]:
+                    for k in s_k:
+                        self.stats[k] *= (1+stats[k])
+                        print(self.calc_upgrade()[0])
+                        ratios[item][key] = (self.calc_upgrade()[0] - damage) / stats["price"]
+                        self.stats[k] /= (1+stats[k])
+                        self.update_stats()
+                else:
+                    for k in s_k:
+                        self.stats[k] += stats[k] / 100
+                        print(self.calc_upgrade()[0])
+                        print(stats["price"])
+                        ratios[item][key] = (self.calc_upgrade()[0] - damage) / stats["price"]
+                        self.stats[k] -= stats[k] / 100
+                        self.update_stats()
+        # for k in ratios.keys():
+        #     for l in k.keys():
+
+        print(ratios)
 
     def clean_up(self, dmg):
         self.convert_stats_to_percent()
         self.stats = {k: self.stats[k] - self.boni[k] for k in self.stats}
         self.convert_stats_to_proportion()
         self.stats["attack"] -= self.attack_bonus
-        print(dmg, 1*self.damage_multiplier)
         return dmg * (1 + self.damage_multiplier), self.stats
 
-    def calc_upgrade(self, available_sp=None, cost_of_upgrade=None, stats=None):
+    def calc_upgrade(self, available_sp=None, cost_of_upgrade=None):
         if available_sp == None:
             available_sp = self.available_sp
         if cost_of_upgrade == None:
@@ -492,7 +554,7 @@ class DamageCalculator:
 
 if __name__ == "__main__":
     dcalc = DamageCalculator(
-        available_sp=0,
+        available_sp=52,
         helmetlvl=0,
         chestlvl=0,
         gloveslvl=0,
@@ -506,7 +568,7 @@ if __name__ == "__main__":
         country_orderlvl=0,
         mu_orderlvl=0,
         resistance=0,
-        is_pill=True,
+        is_pill=False,
         is_core_region=False,
         is_ally=False,
         is_sworn_enemy=False,
@@ -514,4 +576,4 @@ if __name__ == "__main__":
         is_attacking_region_lost=False,
         is_per_hour=False,
     )
-    print(dcalc.calc_upgrade()[0] * 1)
+    print(dcalc.optimize_for_cash(100))
