@@ -13,39 +13,67 @@ class DamageCalculator:
     def __init__(
         self,
         available_sp,
-        helmetlvl,
-        chestlvl,
-        gloveslvl,
-        pantslvl,
+        dodgelvl,
         bootslvl,
-        ammolvl,
-        weaponlvl,
-        mu_hqlvl,
-        country_bunkerlvl,
-        military_baselvl,
-        country_orderlvl,
-        mu_orderlvl,
-        resistance,
-        is_pill,
-        is_core_region,
-        is_ally,
-        is_sworn_enemy,
-        is_region_not_linked,
-        is_attacking_region_lost,
-        is_per_hour,
+        # mu_hqlvl,
+        # country_bunkerlvl,
+        # military_baselvl,
+        # country_orderlvl,
+        # mu_orderlvl,
+        # resistance,
+        # is_pill,
+        # is_core_region,
+        # is_ally,
+        # is_sworn_enemy,
+        # is_region_not_linked,
+        # is_attacking_region_lost,
+        # is_per_hour,
     ):
+        self.BASE_STATS: dict[str, float] = {
+            "attack": 100,
+            "precision": 50,
+            "criticalChance": 10,
+            "criticalDamages": 100,
+            "armor": 0,
+            "dodge": 0,
+            "health": 50,
+        }
+        self.SKILL_GROWTH: dict[str, float] = {
+            "attack": 20,
+            "precision": 0.05,
+            "criticalChance": 0.05,
+            "criticalDamages": 0.2,
+            "armor": 0.04,
+            "dodge": 0.04,
+            "health": 10,
+        }
+        self.WEAPON_HIERARCHY: list[str] = [
+            "hand",
+            "knife",
+            "gun",
+            "rifle",
+            "sniper",
+            "tank",
+            "jet",
+        ]
+        self.AMMO_HIERARCHY: list[str] = ["noAmmo", "lightAmmo", "ammo", "heavyAmmo"]
+
         with open("prices.json", "r") as f:
-            self.item_prices = json.load(f)
-        self.item_prices["items"].update(
+            self.item_prices: dict[str, dict[str, dict[str, dict[str, float]]]] = (
+                json.load(f)["items"]
+            )
+        self.item_prices.update(
             {"pill": {"pill1": {"stats": {"attack": 0.8, "price": 22}}}}
         )
-        self.item_prices["items"].update(
-                {
-                    "ammo": {
+        self.item_prices.update(
+            {
+                "ammo": {
                     "lightAmmo": {"stats": {"attack": 0.1, "price": 0.12}},
                     "ammo": {"stats": {"attack": 0.2, "price": 0.48}},
                     "heavyAmmo": {"stats": {"attack": 0.4, "price": 1.92}},
-                    }})
+                }
+            }
+        )
 
         self.is_pill_multiplier = 0.8
         self.is_core_region_multiplier = 0.15
@@ -55,41 +83,36 @@ class DamageCalculator:
         self.is_attacking_region_lost_multiplier = -0.25
 
         self.available_sp = available_sp  # skill points
-        self.helmetlvl = helmetlvl
-        self.chestlvl = chestlvl
-        self.gloveslvl = gloveslvl
-        self.pantslvl = pantslvl
+        self.dodgelvl = dodgelvl
+
         self.bootslvl = bootslvl
-        self.weaponlvl = weaponlvl
-        self.ammolvl = ammolvl
-        self.mu_hqlvl = mu_hqlvl
-        self.country_bunkerlvl = country_bunkerlvl
-        self.military_baselvl = military_baselvl
-        self.country_orderlvl = country_orderlvl
-        self.mu_orderlvl = mu_orderlvl
-        self.resistance = resistance
-        self.is_pill = is_pill
-        self.is_core_region = is_core_region
-        self.is_ally = is_ally
-        self.is_sworn_enemy = is_sworn_enemy
-        self.is_region_not_linked = is_region_not_linked
-        self.is_attacking_region_lost = is_attacking_region_lost
-        self.per_hour = is_per_hour  # calculate dmg per hour?
+        # self.mu_hqlvl = mu_hqlvl
+        # self.country_bunkerlvl = country_bunkerlvl
+        # self.military_baselvl = military_baselvl
+        # self.country_orderlvl = country_orderlvl
+        # self.mu_orderlvl = mu_orderlvl
+        # self.resistance = resistance
+        # self.is_pill = is_pill
+        # self.is_core_region = is_core_region
+        # self.is_ally = is_ally
+        # self.is_sworn_enemy = is_sworn_enemy
+        # self.is_region_not_linked = is_region_not_linked
+        # self.is_attacking_region_lost = is_attacking_region_lost
+        # self.per_hour = is_per_hour  # calculate dmg per hour?
 
         # self.pull_gear_from_api("items.json")
-        self.gear = DamageCalculator.get_gear("items.json")
-        self.equipment = self.get_equipment()
+        gear = DamageCalculator.get_gear("items.json")
+        equipment = self.get_equipment(gear)
 
-        (
-            self.helmet,
-            self.chest,
-            self.gloves,
-            self.pants,
-            self.boots,
-            self.ammo,
-            self.weapon,
-        ) = self.separate_eq()
-        self.helmet["helmet0"] = {
+        self.HELMETS = {k: v for k, v in equipment.items() if k.startswith("helmet")}
+        self.CHESTS = {k: v for k, v in equipment.items() if k.startswith("chest")}
+        self.GLOVES = {k: v for k, v in equipment.items() if k.startswith("gloves")}
+        self.PANTS = {k: v for k, v in equipment.items() if k.startswith("pants")}
+        self.BOOTS = {k: v for k, v in equipment.items() if k.startswith("boots")}
+        self.WEAPONS = {k: v for k, v in equipment.items() if v["type"] == "weapon"}
+        self.BULLETS = {k: v for k, v in equipment.items() if "ammo" in k.lower()}
+
+        self.HELMETS["helmet0"] = {
             "dynamicStats": {
                 "criticalDamages": [
                     0,
@@ -97,7 +120,7 @@ class DamageCalculator:
                 ]
             }
         }
-        self.chest["chest0"] = {
+        self.CHESTS["chest0"] = {
             "dynamicStats": {
                 "armor": [
                     0,
@@ -105,7 +128,7 @@ class DamageCalculator:
                 ]
             }
         }
-        self.gloves["gloves0"] = {
+        self.GLOVES["gloves0"] = {
             "dynamicStats": {
                 "precision": [
                     0,
@@ -113,7 +136,7 @@ class DamageCalculator:
                 ]
             }
         }
-        self.pants["pants0"] = {
+        self.PANTS["pants0"] = {
             "dynamicStats": {
                 "armor": [
                     0,
@@ -121,7 +144,7 @@ class DamageCalculator:
                 ]
             }
         }
-        self.boots["boots0"] = {
+        self.BOOTS["boots0"] = {
             "dynamicStats": {
                 "dodge": [
                     0,
@@ -129,8 +152,8 @@ class DamageCalculator:
                 ]
             }
         }
-        self.ammo["noAmmo"] = {"flatStats": {"percentAttack": 0}}
-        self.weapon["hand"] = {
+        self.BULLETS["noAmmo"] = {"flatStats": {"percentAttack": 0}}
+        self.WEAPONS["hand"] = {
             "dynamicStats": {
                 "attack": [
                     0,
@@ -142,42 +165,11 @@ class DamageCalculator:
                 ],
             }
         }
-        self.country_bunkers = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15, 4: 0.2, 5: 0.25}
-        self.military_bases = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15, 4: 0.2, 5: 0.25}
-        self.country_orders = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15}
-        self.mu_orders = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15}
-        self.mu_hqs = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15, 4: 0.2}
-
-        self.weapon_hierarchy = [
-            "hand",
-            "knife",
-            "gun",
-            "rifle",
-            "sniper",
-            "tank",
-            "jet",
-        ]
-        self.ammo_hierarchy = ["noAmmo", "lightAmmo", "ammo", "heavyAmmo"]
-
-        self.base_stats: dict[str, float] = {
-            "attack": 100,
-            "precision": 50,
-            "criticalChance": 10,
-            "criticalDamages": 100,
-            "armor": 0,
-            "dodge": 0,
-            "health": 50,
-        }
-
-        self.skill_growth = {
-            "attack": 20,
-            "precision": 0.05,
-            "criticalChance": 0.05,
-            "criticalDamages": 0.2,
-            "armor": 0.04,
-            "dodge": 0.04,
-            "health": 10,
-        }
+        self.COUNTRY_BUNKERS = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15, 4: 0.2, 5: 0.25}
+        self.MILITARY_BASES = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15, 4: 0.2, 5: 0.25}
+        self.COUNTRY_ORDERS = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15}
+        self.MU_ORDERS = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15}
+        self.MU_HQS = {0: 0, 1: 0.05, 2: 0.1, 3: 0.15, 4: 0.2}
 
         self.cost_of_upgrade = {
             "attack": 1,
@@ -198,33 +190,25 @@ class DamageCalculator:
             "dodge": 0,
             "health": 0,
         }
-        clothing = ["helmet", "chest", "gloves", "pants", "boots"]
-        for cloth in clothing:
-            setattr(
-                self,
-                f"{cloth}_stats",
-                getattr(self, f"{cloth}")[f"{cloth}{getattr(self, f'{cloth}lvl')}"][
-                    "dynamicStats"
-                ],
-            )
-        self.weapon_stats = self.weapon[self.weapon_hierarchy[self.weaponlvl]][
-            "dynamicStats"
-        ]
+        self.boots_stats = self.BOOTS[f"boots{self.bootslvl}"]
         self.eq_stats = [
-            self.helmet_stats,
-            self.chest_stats,
-            self.gloves_stats,
-            self.pants_stats,
+            self.HELMETS["helmet0"],
+            # self.HELMETS["helmet1"],
+            self.CHESTS["chest0"],
+            self.GLOVES["gloves0"],
+            self.PANTS["pants0"],
             self.boots_stats,
-            self.weapon_stats,
+            self.WEAPONS[self.WEAPON_HIERARCHY[0]],
         ]
-        self.bullets_stats = self.ammo[self.ammo_hierarchy[self.ammolvl]]["flatStats"]
-        self.mu_hq_stats = self.mu_hqs[self.mu_hqlvl]
-        self.country_bunker_stats = self.country_bunkers[self.country_bunkerlvl]
-        self.military_base_stats = self.military_bases[self.military_baselvl]
-        self.country_order_stats = self.country_orders[self.country_orderlvl]
-        self.mu_order_stats = self.mu_orders[self.mu_orderlvl]
-        self.stats = self.base_stats  # stats are in %
+        self.gear_cost = 0
+        # self.gear_cost = 2
+
+        # self.mu_hq_stats = self.MU_HQS[self.mu_hqlvl]
+        # self.country_bunker_stats = self.COUNTRY_BUNKERS[self.country_bunkerlvl]
+        # self.military_base_stats = self.MILITARY_BASES[self.military_baselvl]
+        # self.country_order_stats = self.COUNTRY_ORDERS[self.country_orderlvl]
+        # self.mu_order_stats = self.MU_ORDERS[self.mu_orderlvl]
+        self.stats = self.BASE_STATS  # stats are in %
         self.convert_stats_to_proportion()
         self.update_boni()  # this call needs stats in proportion
         self.update_stats()
@@ -235,24 +219,65 @@ class DamageCalculator:
             gear = json.load(f)
         return gear
 
-    def get_equipment(self):
-        c_gear = self.gear.copy()
-        for k in self.gear.keys():
+    def get_equipment(self, gear):
+        c_gear = gear.copy()
+        for k in gear.keys():
             if "dynamicStats" not in c_gear[k].keys() and not re.search(
                 re.compile("ammo", re.IGNORECASE), k
             ):
                 c_gear.pop(k)
-        return self.gear
+        return gear
 
-    def separate_eq(self):
-        helmet = {k: v for k, v in self.equipment.items() if k.startswith("helmet")}
-        chest = {k: v for k, v in self.equipment.items() if k.startswith("chest")}
-        gloves = {k: v for k, v in self.equipment.items() if k.startswith("gloves")}
-        pants = {k: v for k, v in self.equipment.items() if k.startswith("pants")}
-        boots = {k: v for k, v in self.equipment.items() if k.startswith("boots")}
-        weapons = {k: v for k, v in self.equipment.items() if v["type"] == "weapon"}
-        ammo = {k: v for k, v in self.equipment.items() if "ammo" in k.lower()}
-        return helmet, chest, gloves, pants, boots, ammo, weapons
+    def update_boni(self):
+        self.boni = {
+            "attack": 0,
+            "precision": 0,
+            "criticalChance": 0,
+            "criticalDamages": 0,
+            "armor": 0,
+            "dodge": 0,
+            "health": 0,
+        }
+        for s in self.eq_stats:
+            eq = s["dynamicStats"]
+            for k in eq.keys():
+                self.boni[k] += (
+                    eq[k][0] + (eq[k][1] - eq[k][0]) / 4
+                )  # bottom quartile of the stats
+
+        print(self.boni)
+
+    def update_stats(self):
+        print(self.stats)
+        self.convert_stats_to_percent()
+        self.stats: dict[str, float] = {
+            k: self.BASE_STATS[k] + self.boni[k] for k in self.BASE_STATS.keys()
+        }
+        self.convert_stats_to_proportion()
+        print(self.stats)
+        # self.attack_bonus = self.stats["attack"] * (
+        #     + self.is_pill * self.is_pill_multiplier
+        #     + self.BULLETS_STATS["percentAttack"] / 100
+        # )
+        # self.damage_multiplier = np.sum(
+        #     np.array(
+        #         [
+        #             self.mu_hq_stats,
+        #             self.mu_order_stats,
+        #             self.country_bunker_stats,
+        #             self.resistance / 100,
+        #             self.country_order_stats,
+        #             self.military_base_stats,
+        #             self.is_core_region * self.is_core_region_multiplier,
+        #             self.is_ally * self.is_ally_multiplier,
+        #             self.is_sworn_enemy * self.is_sworn_enemy_multiplier,
+        #             self.is_region_not_linked * self.is_region_not_linked_multiplier,
+        #             self.is_attacking_region_lost
+        #             * self.is_attacking_region_lost_multiplier,
+        #         ]
+        #     )
+        # )
+        # self.stats["attack"] += self.attack_bonus
 
     def convert_stats_to_percent(self):
         self.stats["precision"] *= 100
@@ -279,67 +304,44 @@ class DamageCalculator:
         return wrapper
 
     @setter
-    def set_helmet_lvl(self, lvl):
-        self.helmet_stats = self.helmet[f"helmet{lvl}"]["dynamicStats"]
-        self.eq_stats[0] = self.helmet_stats
-
-    @setter
-    def set_chest_lvl(self, lvl):
-        self.chest_stats = self.chest[f"chest{lvl}"]["dynamicStats"]
-        self.eq_stats[1] = self.chest_stats
-
-    @setter
-    def set_gloves_lvl(self, lvl):
-        self.gloves_stats = self.gloves[f"gloves{lvl}"]["dynamicStats"]
-        self.eq_stats[2] = self.gloves_stats
-
-    @setter
-    def set_pants_lvl(self, lvl):
-        self.pants_stats = self.pants[f"pants{lvl}"]["dynamicStats"]
-        self.eq_stats[3] = self.pants_stats
-
-    @setter
     def set_boots_lvl(self, lvl):
-        self.boots_stats = self.boots[f"boots{lvl}"]["dynamicStats"]
-        self.eq_stats[4] = self.boots_stats
+        self.boots_stats = self.BOOTS[f"boots{lvl}"]["dynamicStats"]
 
     @setter
-    def set_ammo_lvl(self, lvl):
-        self.ammolvl = lvl
-        self.bullets_stats = self.ammo[self.ammo_hierarchy[self.ammolvl]]["flatStats"]
+    def set_dodge_lvl(self, lvl):
+        self.dodgelvl = lvl
 
     @setter
     def set_weapon_lvl(self, lvl):
         self.weaponlvl = lvl
-        self.weapon_stats = self.weapon[self.weapon_hierarchy[self.weaponlvl]][
+        self.weapon_stats = self.WEAPONS[self.WEAPON_HIERARCHY[self.weaponlvl]][
             "dynamicStats"
         ]
-        self.eq_stats[5] = self.weapon_stats
 
     @setter
     def set_mu_hq_lvl(self, lvl):
         self.mu_hqlvl = lvl
-        self.mu_hq_stats = self.mu_hqs[lvl]
+        self.mu_hq_stats = self.MU_HQS[lvl]
 
     @setter
     def set_country_bunker_lvl(self, lvl):
         self.country_bunkerlvl = lvl
-        self.country_bunker_stats = self.country_bunkers[lvl]
+        self.country_bunker_stats = self.COUNTRY_BUNKERS[lvl]
 
     @setter
     def set_military_base_lvl(self, lvl):
         self.military_baselvl = lvl
-        self.military_base_stats = self.military_bases[lvl]
+        self.military_base_stats = self.MILITARY_BASES[lvl]
 
     @setter
     def set_country_order_lvl(self, lvl):
         self.country_orderlvl = lvl
-        self.country_order_stats = self.country_orders[lvl]
+        self.country_order_stats = self.COUNTRY_ORDERS[lvl]
 
     @setter
     def set_mu_order_lvl(self, lvl):
         self.mu_orderlvl = lvl
-        self.mu_order_stats = self.mu_orders[lvl]
+        self.mu_order_stats = self.MU_ORDERS[lvl]
 
     @setter
     def set_resistance(self, res):
@@ -377,126 +379,25 @@ class DamageCalculator:
     def set_attacking_region_lost(self, b):
         self.is_attacking_region_lost = b
 
-    def update_stats(self):
-        self.convert_stats_to_percent()
-        self.stats: dict[str, float] = {
-            k: self.base_stats[k] + self.boni[k] for k in self.base_stats.keys()
-        }
-        self.convert_stats_to_proportion()
-        self.attack_bonus = self.stats["attack"] * (
-            +self.is_pill * self.is_pill_multiplier
-            + self.bullets_stats["percentAttack"] / 100
-        )
-        self.damage_multiplier = np.sum(
-            np.array(
-                [
-                    self.mu_hq_stats,
-                    self.mu_order_stats,
-                    self.country_bunker_stats,
-                    self.resistance / 100,
-                    self.country_order_stats,
-                    self.military_base_stats,
-                    self.is_core_region * self.is_core_region_multiplier,
-                    self.is_ally * self.is_ally_multiplier,
-                    self.is_sworn_enemy * self.is_sworn_enemy_multiplier,
-                    self.is_region_not_linked * self.is_region_not_linked_multiplier,
-                    self.is_attacking_region_lost
-                    * self.is_attacking_region_lost_multiplier,
-                ]
-            )
-        )
-        self.stats["attack"] += self.attack_bonus
-
-    def update_boni(self):
-        self.boni = {
-            "attack": 0,
-            "precision": 0,
-            "criticalChance": 0,
-            "criticalDamages": 0,
-            "armor": 0,
-            "dodge": 0,
-            "health": 0,
-        }
-        for s in self.eq_stats:
-            for k in self.boni.keys():
-                try:
-                    self.boni[k] += (
-                        s[k][0] + (s[k][1] - s[k][0]) / 4
-                    )  # bottom quartile of the stats
-                except KeyError:
-                    pass
-
-    def calculate_dmg(self, stats):
-        precision_multiplier = (
-            stats["precision"]  # chance to hit
-            + (1 - stats["precision"])
-            * 0.5  # chance to miss (which divides damage in half)
-        )
-        damage_times_precision = stats["attack"] * precision_multiplier
-        dmg_per_attack = (1 - stats["criticalChance"]) * damage_times_precision + stats[
-            "criticalChance"
-        ] * damage_times_precision * (1 + stats["criticalDamages"])
-        dmg_over_8h_cycle = (
-            dmg_per_attack
-            * (
-                stats["health"] / 10
-                + stats["health"]
-                / 100  # because health regen is 1/10th of total health, and one needs 10 health to make an attack
-                / (1 - stats["dodge"])
-                / (1 - stats["armor"])
-                * 8
-            )
-        )
-        return dmg_per_attack, dmg_over_8h_cycle
-
-    def optimize_for_cash(self, cash, spent_on_eq=None, items=None):
-        item_types = [
-            "weapon",
-            "helmet",
-            "chest",
-            "gloves",
-            "pants",
-            "boots",
-            "pill",
-            "ammo",
-        ]
-        if items == None:
-            items = [
-                "knife",
-                "helmet1",
-                "chest1",
-                "gloves1",
-                "pants1",
-                "boots1",
-                "pill1",
-                "lightAmmo",
-            ]
-        if spent_on_eq == None:
-            spent_on_eq = 0
-        ratios = defaultdict(lambda: defaultdict(dict))
-        damage = self.calc_upgrade()[0]
-        for item_type, item in zip(item_types, items):
-            for key, stats in self.item_prices["items"][item_type][item].items():
-                s_k = list(stats.keys())[:-1]
-                if item_type in ["pill", "ammo"]:
-                    for k in s_k:
-                        self.stats[k] *= (1+stats[k])
-                        print(self.calc_upgrade()[0])
-                        ratios[item][key] = (self.calc_upgrade()[0] - damage) / stats["price"]
-                        self.stats[k] /= (1+stats[k])
-                        self.update_stats()
-                else:
-                    for k in s_k:
-                        self.stats[k] += stats[k] / 100
-                        print(self.calc_upgrade()[0])
-                        print(stats["price"])
-                        ratios[item][key] = (self.calc_upgrade()[0] - damage) / stats["price"]
-                        self.stats[k] -= stats[k] / 100
-                        self.update_stats()
-        # for k in ratios.keys():
-        #     for l in k.keys():
-
-        print(ratios)
+    def calculate_dmg_efficiency(self, stats, cost):
+        ATK = stats["attack"]
+        PREC = stats["precision"]
+        CRATE = stats["criticalChance"]
+        CDMG = stats["criticalDamages"]
+        ARMOR = stats["armor"]
+        DODGE = stats["dodge"]
+        HEALTH = stats["health"]
+        DURABILITY = 100
+        COST_PER_HIT = cost / DURABILITY * (1 - stats["dodge"])
+        INITIAL_HITS = HEALTH / 100
+        HITS_OVER_TIME = HEALTH / 100 / (1 - DODGE) / (1 - ARMOR)
+        PREC_MULTIPLIER = 0.5 * (1 + PREC)
+        NORMAL_ATK = ATK * PREC_MULTIPLIER
+        CRIT_ATK = ATK * PREC_MULTIPLIER * (1 + CDMG)
+        DMG_PER_ATTACK = (1-CRATE) * NORMAL_ATK + CRATE * CRIT_ATK
+        BTC_PER_1K_DMG = COST_PER_HIT / DMG_PER_ATTACK * 1000 
+        DMG_OVER_8H = DMG_PER_ATTACK * INITIAL_HITS * HITS_OVER_TIME
+        return DMG_OVER_8H, BTC_PER_1K_DMG
 
     def clean_up(self, dmg):
         self.convert_stats_to_percent()
@@ -511,7 +412,7 @@ class DamageCalculator:
         if cost_of_upgrade == None:
             cost_of_upgrade = deepcopy(self.cost_of_upgrade)
 
-        dmg = self.calculate_dmg(self.stats)[self.per_hour]
+        BASE_EFFICIENCY = self.calculate_dmg_efficiency(self.stats, self.gear_cost)
 
         if available_sp < np.all(np.array(cost_of_upgrade.values())):
             return self.clean_up(dmg)
@@ -555,25 +456,19 @@ class DamageCalculator:
 if __name__ == "__main__":
     dcalc = DamageCalculator(
         available_sp=52,
-        helmetlvl=0,
-        chestlvl=0,
-        gloveslvl=0,
-        pantslvl=0,
         bootslvl=0,
-        ammolvl=0,
-        weaponlvl=0,
-        mu_hqlvl=0,
-        country_bunkerlvl=0,
-        military_baselvl=0,
-        country_orderlvl=0,
-        mu_orderlvl=0,
-        resistance=0,
-        is_pill=False,
-        is_core_region=False,
-        is_ally=False,
-        is_sworn_enemy=False,
-        is_region_not_linked=False,
-        is_attacking_region_lost=False,
-        is_per_hour=False,
+        dodgelvl=0,
+        # mu_hqlvl=0,
+        # couuntry_bunkerlvl=0,
+        # miulitary_baselvl=0,
+        # couuntry_orderlvl=0,
+        # muu_orderlvl=0,
+        # reusistance=0,
+        # isu_pill=False,
+        # isu_core_region=False,
+        # isu_ally=False,
+        # isu_sworn_enemy=False,
+        # isu_region_not_linked=False,
+        # isu_attacking_region_lost=False,
+        # isu_per_hour=False,
     )
-    print(dcalc.optimize_for_cash(100))
